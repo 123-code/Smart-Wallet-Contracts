@@ -4,78 +4,79 @@ import "https://github.com/OpenZeppelin/openzeppelin-solidity/contracts/access/O
 
 contract MultiSig is Ownable{
 
+    event deposit(address indexed sender, uint amount, uint balance);
+    event SendTX(address indexed owner,uint indexed txindex,address indexed to,uint value,bytes data);
+    event ConfirmTransaction(address indexed owner,uint indexed txindex);
+    event RevokeCnfirmation(address indexed owner,uint indexed txindex);
+    event ExecuteTransaction(address indexed owner,uint indexed txindex);
 
-event Deposit(address indexed sender,uint256 amount);
-event SubmitTx(uint indexed txID);
+    mapping(address=>bool) public added;
+    address[] public owners;
+    uint public ConfirmationsRequired;
 
-uint256 required;
-address[] public Owners;
-mapping(address=>bool) isOwner;
-// numrequired in wallet 
-uint256 numtxrequired;
-Transaction[]public transactions;
-mapping(uint=>mapping(address=>bool)) public approved;
-mapping(uint=>mapping(address=>bool)) public executed;
-
-struct Transaction{
-address _to;
-uint _value;
-bytes data;
-bool executed;
-}
-
-// function modifiers
-modifier NotApproved(uint256 txid){
-    require(approved[txid][msg.sender]=false,"tx already approved");
-    _;
-}
-
-modifier NotExecuted(uint256 txid){
-    require(!transactions[txid].executed,"already executed");
-    _;
-}
-
-modifier Exists(uint256 txid){
-    // tx exists if index ios less than array length
-    require(txid<transactions.length,"tx doesnt exist");
-    _;
-}
-
-
-constructor( address[]memory owners,uint256 _required){
-require(owners.length> 0,"Error");
-require(required > 0 && required <= owners.length,"invalid length");
-// check address is not 0x and doesnt repeat.
-for(uint256 i=0;i<owners.length;i++){
-    address owner = owners[i];
-    require(owner != address(0),"0x");
-    require(isOwner[owner]!= true,"Address already here");
-    isOwner[owner] = true;
-    Owners.push(owner);
-}
-required = _required;
-}
-
-
-function executeTransaction()external{}
-
-function ConfirmTransaction()external{}
-
-function SubmitTransaction(uint256 _amount,address _to,bytes calldata data) external onlyOwner{
-    transactions.push(Transaction(_to,_amount,data,false));
-        emit SubmitTx(transactions.length-1);
+    struct Transaction{
+    address to;
+    uint value;
+    bytes data;
+    bool executed;
+    mapping(asddress=>bool) isConfirmed;
+    uint numconfirmations;
     }
 
-function RevokeConfirmation() external {}
+    Transaction[] public transactions;
 
 
-function ApproveTX(uint256 _txid)external onlyOwner NotExecuted(_txid) NotApproved(_txid) Exists(_txid) {
+
+constructor(address[] memory _owners,uint _ConfirmationsRequired)public{
+require(_owners.length>0,"no owners");
+require(_ConfirmationsRequired > 0 && _ConfirmationsRequired < = _owners.length,"invalid number");
+
+for(uint256=0;i<_owners.length;i++){
+    address owner = _owners[i];
+    require( owner =! owners(0),"invalid address");
+    require(added[owner]==false,"owner already added");
+    added[owner]=true;
+}
+ConfirmationsRequired = _ConfirmationsRequired;
 
 }
 
-//balance
-receive() external payable{
-    emit Deposit(msg.sender,msg.value);
+modifier notconfirmed(uint256 _txindex){
+    require(transactions[_txindex].isConfirmed == false,"transction already confirmed");
+    _;
 }
- 
+
+modifier NotExecuted(uint256 _txindex){
+    require(transactions[_txindex].executed == false,"transction already executed");
+    _;
+}
+
+modifier TXExists(uint256 _txindex){
+    require(_txindex < transactions.length,"transction does not exist");
+    _;
+}
+
+
+
+function SubmitTransaction(addres _to, uint256 _value,bytes memory _data) external onlyOwner{
+    uint256 txindex = transactions.length;
+// pushes transaction to array of proposed transactions
+    transactions.push(Transaction({
+        to:_to;
+        value:_value;
+        data:_data;
+        executed:false;
+        numconfirmations:0;
+    }));
+    emit SendTX(msg.sender,txindex ,_to,_value,_data);
+
+}
+
+function ConfirmTransaction(uint _txindex) external onlyOwner 
+NotExecuted(_txindex)
+ notconfirmed(_txindex)
+ TXExists(_txindex){
+Transaction storage transaction = transactions[_txindex];
+transaction.isConfirmed[msg.sender]=true;
+}
 }
